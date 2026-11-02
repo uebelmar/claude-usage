@@ -42,11 +42,7 @@ und Modell-Wochenlimits.
 ## Installation
 
 1. `ClaudeUsage.zip` aus den [Releases](../../releases) laden, entpacken, nach `/Applications` oder `~/Applications` ziehen.
-2. Die App ist mit Developer ID signiert, aber **nicht notarisiert**. Beim ersten Start daher:
-   Rechtsklick → **Öffnen**, oder einmal im Terminal:
-   ```sh
-   xattr -dr com.apple.quarantine ~/Applications/ClaudeUsage.app
-   ```
+2. Starten – die App ist mit Developer ID signiert und von Apple notarisiert.
 3. Voraussetzung: [Claude Code](https://docs.claude.com/en/docs/claude-code) (`claude`) ist installiert – es wird nur für den Login genutzt.
 
 ## Accounts hinzufügen
@@ -81,7 +77,7 @@ Benötigt Xcode 16+ und [XcodeGen](https://github.com/yonaskolb/XcodeGen) (`brew
 
 ```sh
 ./scripts/build.sh     # baut, installiert nach ~/Applications und startet die App
-./scripts/release.sh   # Developer-ID-signiertes ZIP unter build/release/
+./scripts/release.sh   # archivieren, notarisieren, ZIP unter build/release/
 ```
 
 Eigenes Team: in `project.yml` `DEVELOPMENT_TEAM` und die App-Group (`<TEAMID>.claudeusage`, auch in
