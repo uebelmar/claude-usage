@@ -1,0 +1,59 @@
+name: ClaudeUsage
+options:
+  bundleIdPrefix: com.uebelmar
+  deploymentTarget:
+    macOS: "14.0"
+  createIntermediateGroups: true
+settings:
+  base:
+    DEVELOPMENT_TEAM: G33B89LJ73
+    # Manuell mit "Apple Development" signieren, ohne Provisioning-Profil:
+    # App-Group (Team-Präfix) + Sandbox brauchen auf macOS kein Profil,
+    # dadurch wird im Developer-Account nichts registriert.
+    CODE_SIGN_STYLE: Manual
+    CODE_SIGN_IDENTITY: "Apple Development"
+    PROVISIONING_PROFILE_SPECIFIER: ""
+    ENABLE_HARDENED_RUNTIME: NO
+    SWIFT_VERSION: "5.0"
+    MARKETING_VERSION: "1.0"
+    CURRENT_PROJECT_VERSION: "1"
+targets:
+  ClaudeUsage:
+    type: application
+    platform: macOS
+    sources: [App, Shared]
+    info:
+      path: App/Info.plist
+      properties:
+        CFBundleDisplayName: Claude Usage
+        LSUIElement: true
+        AppGroupID: G33B89LJ73.claudeusage
+    entitlements:
+      path: App/ClaudeUsage.entitlements
+      properties:
+        com.apple.security.application-groups: [G33B89LJ73.claudeusage]
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: com.uebelmar.claudeusage
+    dependencies:
+      - target: ClaudeUsageWidget
+        embed: true
+  ClaudeUsageWidget:
+    type: app-extension
+    platform: macOS
+    sources: [Widget, Shared]
+    info:
+      path: Widget/Info.plist
+      properties:
+        CFBundleDisplayName: Claude Usage
+        AppGroupID: G33B89LJ73.claudeusage
+        NSExtension:
+          NSExtensionPointIdentifier: com.apple.widgetkit-extension
+    entitlements:
+      path: Widget/ClaudeUsageWidget.entitlements
+      properties:
+        com.apple.security.app-sandbox: true
+        com.apple.security.application-groups: [G33B89LJ73.claudeusage]
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: com.uebelmar.claudeusage.widget
