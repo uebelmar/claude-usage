@@ -87,12 +87,15 @@ private struct AccountCard: View {
                 VStack(alignment: .leading, spacing: 6) {
                     if let s = usage.session {
                         WindowRow(window: s, now: ctx.date, prominent: true)
-                    } else if usage.updatedAt != nil {
-                        // Kein laufendes 5-h-Fenster: startet erst mit der nächsten Nachricht.
+                        if usage.plan == "Ultra" {
+                            Text("Vorläufiges 5-h-Limit – Konto noch nicht verifiziert")
+                                .font(.caption2).foregroundStyle(.secondary)
+                        }
+                    } else if usage.hasNoSessionLimit {
                         HStack {
                             Text("5 h").font(.callout)
                             Spacer()
-                            Text("frei · startet bei Nutzung").font(.caption).foregroundStyle(.secondary)
+                            Text("kein Limit").font(.caption).foregroundStyle(.secondary)
                         }
                     }
                     if let w = usage.weekly { WindowRow(window: w, now: ctx.date, prominent: true) }
@@ -135,7 +138,7 @@ private struct WindowRow: View {
                     .foregroundStyle(UsageFormat.color(window.usedPercent))
             }
             UsageBar(percent: window.usedPercent, height: prominent ? 6 : 4)
-            Text("Reset \(UsageFormat.reset(window.resetsAt, now: now))")
+            Text(window.resetsAt == nil ? "ruht · startet bei Nutzung" : "Reset \(UsageFormat.reset(window.resetsAt, now: now))")
                 .font(.caption2).foregroundStyle(.secondary)
         }
     }

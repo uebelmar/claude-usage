@@ -32,10 +32,12 @@ struct AccountUsage: Codable, Hashable, Identifiable {
 }
 
 extension AccountUsage {
-    /// Kein 5-h-Fenster in der Antwort = derzeit keins aktiv (0 %), sofern die Abfrage geklappt hat.
-    var sessionOrFree: UsageWindow? {
-        session ?? (updatedAt != nil ? UsageWindow(label: "5 h", usedPercent: 0, resetsAt: nil) : nil)
-    }
+    /// Kein `five_hour` in der Antwort = Konto hat kein 5-h-Limit (verifiziertes Ultra seit 30.10.2026).
+    /// Ein ruhendes 5-h-Fenster kommt dagegen als Objekt mit 0 % und ohne `resets_at`.
+    var hasNoSessionLimit: Bool { session == nil && updatedAt != nil }
+
+    /// Engstes Limit (höchste Auslastung aus 5 h und Woche) – Wert für die Menüleiste.
+    var bindingPercent: Double? { [session?.usedPercent, weekly?.usedPercent].compactMap { $0 }.max() }
 }
 
 struct UsageSnapshot: Codable {

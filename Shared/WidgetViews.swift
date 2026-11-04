@@ -40,7 +40,7 @@ struct UsageWidgetView: View {
                         if u.error != nil && u.session == nil { Image(systemName: "exclamationmark.triangle").font(.caption2).foregroundStyle(.orange) }
                     }
                     HStack(spacing: 6) {
-                        MiniStat(label: "5h", window: u.sessionOrFree)
+                        MiniStat(label: "5h", window: u.session, noLimit: u.hasNoSessionLimit)
                         MiniStat(label: "W", window: u.weekly)
                     }
                     if let r = u.session?.resetsAt, r > entry.date {
@@ -61,7 +61,7 @@ struct UsageWidgetView: View {
                         if let p = u.plan { Text(p.capitalized).font(.system(size: 9)).foregroundStyle(.secondary) }
                     }
                     .frame(width: 62, alignment: .leading)
-                    WindowCell(window: u.sessionOrFree, fallback: "5 h", now: entry.date)
+                    WindowCell(window: u.session, fallback: "5 h", now: entry.date, noLimit: u.hasNoSessionLimit)
                     WindowCell(window: u.weekly, fallback: "Woche", now: entry.date)
                 }
             }
@@ -81,7 +81,7 @@ struct UsageWidgetView: View {
                         if let err = u.error { Text(err).font(.system(size: 9)).foregroundStyle(.orange).lineLimit(1) }
                     }
                     HStack(spacing: 10) {
-                        WindowCell(window: u.sessionOrFree, fallback: "5 h", now: entry.date)
+                        WindowCell(window: u.session, fallback: "5 h", now: entry.date, noLimit: u.hasNoSessionLimit)
                         WindowCell(window: u.weekly, fallback: "Woche", now: entry.date)
                     }
                     ForEach(u.modelWeekly, id: \.label) { w in
@@ -107,16 +107,17 @@ struct UsageWidgetView: View {
 private struct MiniStat: View {
     let label: String
     let window: UsageWindow?
+    var noLimit = false
 
     var body: some View {
         VStack(alignment: .leading, spacing: 2) {
             HStack(spacing: 2) {
                 Text(label).font(.system(size: 9)).foregroundStyle(.secondary)
-                Text(window.map { UsageFormat.percent($0.usedPercent) } ?? "–")
+                Text(noLimit ? "∞" : window.map { UsageFormat.percent($0.usedPercent) } ?? "–")
                     .font(.caption.weight(.semibold)).monospacedDigit()
                     .foregroundStyle(window.map { UsageFormat.color($0.usedPercent) } ?? .secondary)
             }
-            UsageBar(percent: window?.usedPercent ?? 0, height: 3)
+            UsageBar(percent: window?.usedPercent ?? 0, height: 3).opacity(noLimit ? 0 : 1)
         }
     }
 }
@@ -125,18 +126,19 @@ private struct WindowCell: View {
     let window: UsageWindow?
     let fallback: String
     let now: Date
+    var noLimit = false
 
     var body: some View {
         VStack(alignment: .leading, spacing: 2) {
             HStack {
                 Text(window?.label ?? fallback).font(.system(size: 10)).foregroundStyle(.secondary)
                 Spacer()
-                Text(window.map { UsageFormat.percent($0.usedPercent) } ?? "–")
+                Text(noLimit ? "∞" : window.map { UsageFormat.percent($0.usedPercent) } ?? "–")
                     .font(.caption.weight(.semibold)).monospacedDigit()
                     .foregroundStyle(window.map { UsageFormat.color($0.usedPercent) } ?? .secondary)
             }
-            UsageBar(percent: window?.usedPercent ?? 0, height: 4)
-            Text(window.map { $0.resetsAt == nil ? "frei" : UsageFormat.reset($0.resetsAt, now: now) } ?? "–")
+            UsageBar(percent: window?.usedPercent ?? 0, height: 4).opacity(noLimit ? 0 : 1)
+            Text(noLimit ? "kein 5-h-Limit" : window.map { $0.resetsAt == nil ? "ruht · startet bei Nutzung" : UsageFormat.reset($0.resetsAt, now: now) } ?? "–")
                 .font(.system(size: 9)).foregroundStyle(.secondary).lineLimit(1)
         }
     }
@@ -146,7 +148,7 @@ extension UsageSnapshot {
     static var preview: UsageSnapshot {
         let now = Date()
         func acc(_ id: String, _ name: String, _ s: Double, _ w: Double) -> AccountUsage {
-            AccountUsage(id: id, name: name, shortName: String(name.prefix(1)), plan: "max",
+            AccountUsage(id: id, name: name, shortName: String(name.prefix(1)), plan: "Ultra",
                          session: UsageWindow(label: "5 h", usedPercent: s, resetsAt: now.addingTimeInterval(7800)),
                          weekly: UsageWindow(label: "Woche", usedPercent: w, resetsAt: now.addingTimeInterval(3 * 86400)),
                          updatedAt: now)

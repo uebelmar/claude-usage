@@ -54,7 +54,7 @@ final class UsageStore: ObservableObject {
 
     var menuBarTitle: String {
         orderedUsage.map { u in
-            let pct = u.sessionOrFree.map { "\(Int($0.usedPercent.rounded()))" } ?? (u.error != nil ? "!" : "–")
+            let pct = u.bindingPercent.map { "\(Int($0.rounded()))" } ?? (u.error != nil ? "!" : "–")
             return "\(u.shortName) \(pct)"
         }.joined(separator: " · ")
     }
@@ -104,7 +104,7 @@ final class UsageStore: ObservableObject {
         u.name = a.name
         u.shortName = shortName
         u.email = a.email
-        u.plan = a.plan
+        u.plan = planName(configDir: a.configDir) ?? a.plan.map(\.capitalized)
         guard var tokens = TokenStore.load(a.id) else {
             u.error = "Kein Login gespeichert – Account neu hinzufügen"
             return (a.id, u, nil)
@@ -138,6 +138,20 @@ final class UsageStore: ObservableObject {
             u.error = error.localizedDescription
             return (a.id, u, nil)
         }
+    }
+
+    /// Planname aus der Rate-Limit-Stufe in `<configDir>/.claude.json` (keine Secrets).
+    /// Seit 30.10.2026: Max 20x → „Ultra“, Max 5x → „Max“.
+    nonisolated private static func planName(configDir: String) -> String? {
+        let url = URL(fileURLWithPath: configDir).appendingPathComponent(".claude.json")
+        guard let data = try? Data(contentsOf: url),
+              let root = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
+              let acc = root["oauthAccount"] as? [String: Any] else { return nil }
+        let tier = ((acc["userRateLimitTier"] as? String) ?? (acc["organizationRateLimitTier"] as? String) ?? "").lowercased()
+        if tier.contains("ultra") || tier.contains("max_20x") { return "Ultra" }
+        if tier.contains("max") { return "Max" }
+        if tier.contains("pro") { return "Pro" }
+        return nil
     }
 
     private func publish() {

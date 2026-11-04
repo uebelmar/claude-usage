@@ -33,7 +33,9 @@ und Modell-Wochenlimits.
 
 ## Funktionen
 
-- Menüleiste: Kurzname + aktuelle 5-h-Auslastung je Account, z. B. `S 42 · M 0 · O 7`
+- Menüleiste: Kurzname + engstes Limit je Account (höherer Wert aus 5 h und Woche), z. B. `S 98 · M 61 · O 0`
+- Pläne seit 30.10.2026: **Ultra** (ehem. Max 20x) hat für verifizierte Konten **kein 5-h-Limit** mehr – angezeigt als „∞ / kein 5-h-Limit“;
+  solange das Konto noch nicht verifiziert ist, gilt ein vorläufiges 5-h-Limit (wird angezeigt). **Max** (ehem. Max 5x) und **Pro** behalten es.
 - Pro Account: 5 h, Woche, Modell-Wochenlimits (z. B. Fable), Extra-Usage – mit Balken und Reset-Zeit
 - Widget (klein / mittel / groß) für Schreibtisch und Mitteilungszentrale
 - Abfrage alle 5 min und nach dem Aufwachen; respektiert Rate-Limits (`retry-after`)
