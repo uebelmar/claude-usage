@@ -106,7 +106,8 @@ final class UsageStore: ObservableObject {
         u.email = a.email
         u.plan = planName(configDir: a.configDir) ?? a.plan.map(\.capitalized)
         guard var tokens = TokenStore.load(a.id) else {
-            u.error = "Kein Login gespeichert – Account neu hinzufügen"
+            u.error = "Kein Login gespeichert – neu anmelden"
+            u.needsLogin = true
             return (a.id, u, nil)
         }
         do {
@@ -129,11 +130,16 @@ final class UsageStore: ObservableObject {
             u.extra = p.extra
             u.updatedAt = Date()
             u.error = nil
+            u.needsLogin = nil
             return (a.id, u, nil)
         } catch ClaudeAPIError.rateLimited(let retryAfter) {
             let until = Date().addingTimeInterval(max(retryAfter ?? 600, 60))
             u.error = "Rate-Limit – nächster Versuch \(UsageFormat.reset(until))"
             return (a.id, u, until)
+        } catch let e as ClaudeAPIError {
+            if case .reloginRequired = e { u.needsLogin = true }
+            u.error = e.localizedDescription
+            return (a.id, u, nil)
         } catch {
             u.error = error.localizedDescription
             return (a.id, u, nil)
@@ -205,7 +211,16 @@ final class UsageStore: ObservableObject {
         var unique = slug, n = 2
         while accounts.contains(where: { $0.id == unique }) { unique = "\(slug)-\(n)"; n += 1 }
 
-        let dir = Self.baseDir.appendingPathComponent(unique)
+        startLogin(id: unique, name: name, dir: Self.baseDir.appendingPathComponent(unique), isNew: true)
+    }
+
+    /// Erneuert den Monitoring-Login eines bestehenden Accounts (z. B. nach verworfenem Refresh-Token).
+    func relogin(_ id: String) {
+        guard pendingLogin == nil, let a = accounts.first(where: { $0.id == id }) else { return }
+        startLogin(id: a.id, name: a.name, dir: URL(fileURLWithPath: a.configDir), isNew: false)
+    }
+
+    private func startLogin(id: String, name: String, dir: URL, isNew: Bool) {
         do {
             try FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
             let script = dir.appendingPathComponent("login.command")
@@ -221,26 +236,36 @@ final class UsageStore: ObservableObject {
             """.write(to: script, atomically: true, encoding: .utf8)
             try FileManager.default.setAttributes([.posixPermissions: 0o700], ofItemAtPath: script.path)
             let before = Keychain.services(prefix: Self.credentialPrefix)
+            // Sekundengenaue Keychain-Zeitstempel → 1 s Spielraum.
+            let since = Date().addingTimeInterval(-1)
             pendingLogin = name
             NSWorkspace.shared.open(script)
-            Task { await waitForLogin(id: unique, name: name, dir: dir, servicesBefore: before) }
+            Task { await waitForLogin(id: id, name: name, dir: dir, isNew: isNew, servicesBefore: before, since: since) }
         } catch {
             showError("Konnte Login nicht vorbereiten: \(error.localizedDescription)")
         }
     }
 
     /// Wartet bis zu 15 min darauf, dass `claude auth login` die Credentials ablegt, und übernimmt sie.
-    private func waitForLogin(id: String, name: String, dir: URL, servicesBefore: Set<String>) async {
+    private func waitForLogin(id: String, name: String, dir: URL, isNew: Bool, servicesBefore: Set<String>, since: Date) async {
         defer { pendingLogin = nil }
         let deadline = Date().addingTimeInterval(15 * 60)
         while Date() < deadline {
             try? await Task.sleep(for: .seconds(3))
             guard pendingLogin == name else { return } // abgebrochen
-            guard let tokens = findCredentials(dir: dir, servicesBefore: servicesBefore) else { continue }
+            guard let tokens = findCredentials(dir: dir, servicesBefore: servicesBefore, since: since) else { continue }
             TokenStore.save(tokens, for: id)
             let info = await Self.authStatus(configDir: dir.path)
-            accounts.append(Account(id: id, name: name, email: info.email, plan: info.plan, configDir: dir.path))
+            if let i = accounts.firstIndex(where: { $0.id == id }) {
+                accounts[i].email = info.email ?? accounts[i].email
+                accounts[i].plan = info.plan ?? accounts[i].plan
+            } else if isNew {
+                accounts.append(Account(id: id, name: name, email: info.email, plan: info.plan, configDir: dir.path))
+            } else {
+                return // Account wurde während des Logins entfernt
+            }
             saveAccounts()
+            backoffUntil[id] = nil
             await refresh(force: true)
             return
         }
@@ -249,7 +274,9 @@ final class UsageStore: ObservableObject {
 
     func cancelPendingLogin() { pendingLogin = nil }
 
-    private func findCredentials(dir: URL, servicesBefore: Set<String>) -> OAuthTokens? {
+    /// Sucht die von `claude auth login` abgelegten Credentials. Nur Einträge, die seit `since` geschrieben
+    /// wurden, zählen – ein alter Eintrag im selben Ordner enthält einen längst rotierten Refresh-Token.
+    private func findCredentials(dir: URL, servicesBefore: Set<String>, since: Date) -> OAuthTokens? {
         // Claude Code legt bei eigenem CLAUDE_CONFIG_DIR einen eigenen Eintrag an:
         // "Claude Code-credentials-<erste 8 Hex-Zeichen von sha256(Pfad)>".
         let hash = SHA256.hash(data: Data(dir.path.utf8)).map { String(format: "%02x", $0) }.joined()
@@ -261,11 +288,13 @@ final class UsageStore: ObservableObject {
             let new = Keychain.services(prefix: Self.credentialPrefix).subtracting(servicesBefore)
             if new.count == 1 { service = new.first }
         }
-        if let service, let data = Keychain.read(service: service), let t = OAuthTokens.fromClaudeCode(data) {
+        if let service, let mdat = Keychain.modificationDate(service: service), mdat >= since,
+           let data = Keychain.read(service: service), let t = OAuthTokens.fromClaudeCode(data) {
             return t
         }
         let file = dir.appendingPathComponent(".credentials.json")
-        if let data = try? Data(contentsOf: file), let t = OAuthTokens.fromClaudeCode(data) { return t }
+        if let mdat = (try? file.resourceValues(forKeys: [.contentModificationDateKey]))?.contentModificationDate,
+           mdat >= since, let data = try? Data(contentsOf: file), let t = OAuthTokens.fromClaudeCode(data) { return t }
         return nil
     }
 

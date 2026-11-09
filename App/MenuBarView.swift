@@ -13,7 +13,12 @@ struct MenuBarView: View {
                 }
             }
             ForEach(store.orderedUsage) { u in
-                AccountCard(usage: u) { store.remove(u.id) }
+                AccountCard(
+                    usage: u,
+                    loginDisabled: store.pendingLogin != nil,
+                    onRelogin: { store.relogin(u.id) },
+                    onRemove: { store.remove(u.id) }
+                )
             }
             if let pending = store.pendingLogin {
                 HStack {
@@ -60,6 +65,8 @@ struct MenuBarView: View {
 
 private struct AccountCard: View {
     let usage: AccountUsage
+    let loginDisabled: Bool
+    let onRelogin: () -> Void
     let onRemove: () -> Void
     @State private var hovering = false
 
@@ -75,6 +82,10 @@ private struct AccountCard: View {
                 }
                 Spacer()
                 if hovering {
+                    Button(action: onRelogin) { Image(systemName: "person.badge.key") }
+                        .buttonStyle(.borderless)
+                        .help("Neu anmelden")
+                        .disabled(loginDisabled)
                     Button(action: onRemove) { Image(systemName: "trash") }
                         .buttonStyle(.borderless)
                         .help("Account entfernen")
@@ -114,6 +125,11 @@ private struct AccountCard: View {
                 Label(err, systemImage: "exclamationmark.triangle")
                     .font(.caption).foregroundStyle(.orange)
                     .fixedSize(horizontal: false, vertical: true)
+                if usage.needsLogin == true {
+                    Button("Neu anmelden …", action: onRelogin)
+                        .controlSize(.small)
+                        .disabled(loginDisabled)
+                }
             }
         }
         .padding(10)

@@ -15,6 +15,20 @@ enum Keychain {
         return SecItemCopyMatching(q as CFDictionary, &out) == errSecSuccess
     }
 
+    /// Letzte Änderung eines Eintrags (nur Attribute, kein Dialog).
+    static func modificationDate(service: String) -> Date? {
+        let q: [String: Any] = [
+            kSecClass as String: kSecClassGenericPassword,
+            kSecAttrService as String: service,
+            kSecReturnAttributes as String: true,
+            kSecMatchLimit as String: kSecMatchLimitOne,
+        ]
+        var out: AnyObject?
+        guard SecItemCopyMatching(q as CFDictionary, &out) == errSecSuccess,
+              let attrs = out as? [String: Any] else { return nil }
+        return attrs[kSecAttrModificationDate as String] as? Date
+    }
+
     /// Alle Service-Namen mit Präfix (nur Attribute, kein Dialog).
     static func services(prefix: String) -> Set<String> {
         let q: [String: Any] = [

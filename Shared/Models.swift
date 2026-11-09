@@ -29,6 +29,8 @@ struct AccountUsage: Codable, Hashable, Identifiable {
     var extra: ExtraUsage?
     var updatedAt: Date?
     var error: String?
+    /// Login ungültig (Refresh-Token verworfen) – nur ein neuer Login hilft.
+    var needsLogin: Bool?
 }
 
 extension AccountUsage {
