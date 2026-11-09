@@ -15,14 +15,35 @@ enum Keychain {
         return SecItemCopyMatching(q as CFDictionary, &out) == errSecSuccess
     }
 
+    /// Liest einen von Claude Code angelegten Eintrag über `/usr/bin/security`. Claude Code schreibt seine
+    /// Einträge mit diesem Tool, dessen ACL vertraut ihm also – kein Zugriffsdialog. Ein direktes
+    /// `SecItemCopyMatching` würde dagegen nach jedem neuen Login erneut nach dem Passwort fragen,
+    /// weil Claude Code den Eintrag neu anlegt und damit „Immer erlauben“ verwirft.
+    static func readViaSecurityTool(service: String) -> Data? {
+        let p = Process()
+        p.executableURL = URL(fileURLWithPath: "/usr/bin/security")
+        p.arguments = ["find-generic-password", "-s", service, "-w"]
+        let out = Pipe()
+        p.standardOutput = out
+        p.standardError = FileHandle.nullDevice
+        do { try p.run() } catch { return nil }
+        let data = out.fileHandleForReading.readDataToEndOfFile()
+        p.waitUntilExit()
+        guard p.terminationStatus == 0 else { return nil }
+        var trimmed = data
+        while let last = trimmed.last, last == 0x0A || last == 0x0D { trimmed.removeLast() }
+        return trimmed.isEmpty ? nil : trimmed
+    }
+
     /// Letzte Änderung eines Eintrags (nur Attribute, kein Dialog).
-    static func modificationDate(service: String) -> Date? {
-        let q: [String: Any] = [
+    static func modificationDate(service: String, account: String? = nil) -> Date? {
+        var q: [String: Any] = [
             kSecClass as String: kSecClassGenericPassword,
             kSecAttrService as String: service,
             kSecReturnAttributes as String: true,
             kSecMatchLimit as String: kSecMatchLimitOne,
         ]
+        if let account { q[kSecAttrAccount as String] = account }
         var out: AnyObject?
         guard SecItemCopyMatching(q as CFDictionary, &out) == errSecSuccess,
               let attrs = out as? [String: Any] else { return nil }

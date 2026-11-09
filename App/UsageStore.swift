@@ -190,9 +190,6 @@ final class UsageStore: ObservableObject {
         Danach öffnet sich ein Terminal mit „claude auth login“ in einem eigenen Ordner. \
         Melde dich dort mit dem gewünschten Account an. Das ist ein separater Login nur für diese \
         Anzeige – Orca und dein normales Claude Code bleiben unberührt.
-
-        Beim Übernehmen fragt macOS einmal nach Zugriff auf den Schlüsselbund-Eintrag \
-        „Claude Code-credentials-…“ → „Immer erlauben“.
         """
         let field = NSTextField(frame: NSRect(x: 0, y: 0, width: 260, height: 24))
         field.placeholderString = "Name"
@@ -217,7 +214,17 @@ final class UsageStore: ObservableObject {
     /// Erneuert den Monitoring-Login eines bestehenden Accounts (z. B. nach verworfenem Refresh-Token).
     func relogin(_ id: String) {
         guard pendingLogin == nil, let a = accounts.first(where: { $0.id == id }) else { return }
-        startLogin(id: a.id, name: a.name, dir: URL(fileURLWithPath: a.configDir), isNew: false)
+        let dir = URL(fileURLWithPath: a.configDir)
+        // Liegt bereits ein Login vor, der neuer ist als unser gespeicherter Token, direkt übernehmen.
+        if let ours = Keychain.modificationDate(service: TokenStore.service, account: a.id),
+           let tokens = findCredentials(dir: dir, servicesBefore: Keychain.services(prefix: Self.credentialPrefix),
+                                        since: ours.addingTimeInterval(1)) {
+            TokenStore.save(tokens, for: a.id)
+            backoffUntil[a.id] = nil
+            Task { await refresh(force: true) }
+            return
+        }
+        startLogin(id: a.id, name: a.name, dir: dir, isNew: false)
     }
 
     private func startLogin(id: String, name: String, dir: URL, isNew: Bool) {
@@ -289,7 +296,7 @@ final class UsageStore: ObservableObject {
             if new.count == 1 { service = new.first }
         }
         if let service, let mdat = Keychain.modificationDate(service: service), mdat >= since,
-           let data = Keychain.read(service: service), let t = OAuthTokens.fromClaudeCode(data) {
+           let data = Keychain.readViaSecurityTool(service: service), let t = OAuthTokens.fromClaudeCode(data) {
             return t
         }
         let file = dir.appendingPathComponent(".credentials.json")
